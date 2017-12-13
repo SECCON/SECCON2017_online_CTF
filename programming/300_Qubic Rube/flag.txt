@@ -1,0 +1,1 @@
+SECCON{Thanks to Denso Wave for inventing the QR code}

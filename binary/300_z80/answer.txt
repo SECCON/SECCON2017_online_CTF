@@ -1,0 +1,5 @@
+Constract a CPU driver by using Arduino MEGA and Z80 CPU 
+and execute the sketch.
+This CPU board has a bug which bit0 and bit1 are swapping.
+We can use software simulators.
+We have to make correct machine code whose bit0 and bit1 are swapped.

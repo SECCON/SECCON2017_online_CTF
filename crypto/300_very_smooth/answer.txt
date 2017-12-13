@@ -1,0 +1,27 @@
+1. Extract certification form PACP file.
+2. Extract modulus N form the certificates.
+3. Finding prime q by factorization in prime numbers with Pollard's p-1 method. Hint: tiltle (very smooth)
+4. Calcurate prime p = N / q
+5. Make private key set (N, e,d) from prime pair (p,q) (e.g. using PiCrypto)
+6. Decrypt index.html from PCAP file.
+7. Answer the text in index.html
+
+〇Title から、RSAに使われている素数が弱い素数(p-1が小さい素数の積)だと推定
+・各PCAPから証明書を取り出す(CRT)
+  - wireshark で TLS の Serve Hello, Certificate, Server Hello Done を探す
+  - Certificateを選択して「パケットバイト列をエクスポート」で CRT.Der を作る
+・証明書からmodulus Nを取り出す
+  - openssl x509 -inform der -in CRT.der -modulus > s.modulus 
+    で modulus N を取り出す
+・solv.pyのようにp-1法で素数pを抽出、RSA鍵セットs.keyを計算・出力する
+  - 何故かPython3から改行が上手く行かないので、全体を囲むb''を削除して、
+    \n を改行に手作業で変換する必要がある(何故？ windowsだけ？)
+・s.pcapのSSL通信を復号してindex.htmlを取り出す
+  -「変数」→「設定...」→「protocols」→「SSL」を開く
+  -「RSA Key list」をEdit...
+  - IP.add = 127.0.0.1, Port=443, Protocol=http,Keyfile=s.keyを指定
+  - SSL の Application data が復号されるので index.html を取り出す
+・html文書のBodyのフラグ部分文字列を回答
+  - Answer: One of these primes is very smooth.
+  - flag: SECCON{One of these primes is very smooth.}
+

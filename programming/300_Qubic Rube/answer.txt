@@ -1,0 +1,31 @@
+Visit the challenge URL http://qubicrube.pwn.seccon.jp:33654/ .
+It shows a rotating cube with QR code on each face.
+View the HTTP source code using a web browser's debugger etc.
+It has image URLs of QR code on each face.
+Decode them, they says:
+    01000000000000000000_U.png: SECCON 2017 Online CTF
+    01000000000000000000_L.png: Qubic Rube
+    01000000000000000000_F.png: No. 1 / 50
+    01000000000000000000_R.png: Next URL is:
+    01000000000000000000_B.png: http://qubicrube.pwn.seccon.jp:33654/02c286df1bbd7923d1f7
+    01000000000000000000_D.png: Hae fun!
+
+So, you can make sense there are 50 stages.
+Visit next URL.
+It shows a routing cube, but a face turned like a Rubic's cube.
+Solve the Rubic's cube and decode QR codes and get next URL.
+Make the solver to repeat 50 times and run it.
+Last cube says:
+    SECCON 2017 Online CTF
+    Qubic Rube
+    No. 50 / 50
+    Congraturations!
+    The flag is:
+    SECCON{...}
+
+Here is a solver, execute it as follows:
+    $ python solver.py
+
+I expect following guys are:
+They print out images, cut, sort, build QR codes, decode them using a smart phone.
+They paste images to a paint software like that, sort, build QR codes, decode them.

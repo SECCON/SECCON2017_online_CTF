@@ -1,0 +1,15 @@
+1. There are search forms that can be searched on the requested path.
+2. Because we are searching by query string in Elasticsearch internally, we can narrow down to specific fields.
+3. If you set the search query to "flag", you can see that there is regular access to "/ flag- (32 letters alphanumeric characters) .txt".
+4. However, it is 404, there is no flag.
+5. If "flag AND response: 200" is specified to restrict to existing files, it is narrowed down to those with a response code of 200.
+6. Get the flag by accessing the displayed path.
+
+
+
+1. リクエストされたパスで検索できる検索フォームがある。
+2. 内部的にはElasticsearchのquery_stringで検索しているため、特定のフィールドでの絞り込みが可能。
+3. 検索クエリを"flag"とすると、定期的に"/flag-(32文字の英数字).txt"へのアクセスがあるのがわかる。
+4. しかし、404であり、そこにフラグはない。
+5. 存在するファイルに限定するため"flag AND response:200"とすると、レスポンスコードが200であるものに絞られる。
+6. 表示されたパスにアクセスしてフラグを取得。

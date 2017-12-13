@@ -1,0 +1,3 @@
+printf machine
+Crack me.
+printf_machine-05943cfba938e4ab7f52f096e35f6197c9308a6c56c83d75812adebe21671f9a.zip(pass;seccon2017)

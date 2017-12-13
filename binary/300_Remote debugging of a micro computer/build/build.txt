@@ -1,0 +1,221 @@
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+■ サーバ構築方法
+
+FreeBSDでの動作を前提としている．
+DebianなどではユーザIDなどの調整が必要．
+
+■■■■■■■■■■■■■■■■
+■ 必要なツール類のビルド
+
+■ ツール一式
+
+以下をビルドする．
+
+・改造GDBシミュレータ
+  ＊上記の問題プログラムを動作させるために必要
+  ＊GDBを改造しgdbserverの機能を追加してあるので，GDBでリモートデバッグできる
+
+・簡易inetd，簡易タイマ
+  ＊簡易inetdを利用することで，GDBにTCP/IPで接続してリモートデバッグ可能にする
+  ＊簡易タイマを利用することで，長時間の接続を自動で切断する
+
+なおGDBに当てるパッチには，安全のために以下の考慮がされている．
+
+・不要で，危険と思われるようなシステムコール・サービスの廃止
+  ＊SYS_kill → 無効化済み
+
+・長時間動作した場合の停止処理を追加
+  → 無限ループで高負荷になることの対策
+
+・ソケット切断時の考慮(read()がゼロで返った場合に停止する)
+  → ソケット切断時にはクローズされる．修正不要
+
+■ ツール類のビルド
+
+% cd
+% unzip sop.zip
+% cd sop/files
+% ./build-1st.sh
+
+→ $HOME/seccon2017 に環境構築する
+
+■ サーバのテスト起動
+
+※ 接続受け付けを行うので，安全のためにlocalhostからの接続のみ受け付ける
+   ようにしてテストするが，可能ならばIPフィルタなどもかけておくべき．
+   インターネット上にあるサーバなどでテストする際には注意すること．
+
+% cd ~/seccon2017/server/files
+% ./run.sh
+
+■ ncでの接続
+
+ncで接続し以下が返ってきたら動作ＯＫ．
+
+% nc localhost 10000
+(接続後，以下を入力してEnter．わかりやすいように途中にEnterを挟んでも良い)
+$g#67+
+$s#73+
+$g#67+
+
+もしくは以下
+% echo '$g#67+' | nc localhost 10000
+% echo '$g#67+$s#73+$g#67+' | nc localhost 10000
+
+% cd ~/seccon2017
+% printf 'g\ns\ng\n' | ./answer/sendgdbproto.pl | nc localhost 10000
+% echo 'm2000,100' | ./answer/sendgdbproto.pl | nc localhost 10000
+
+■ gdbでの接続確認
+
+% cd ~/seccon2017
+% ./tools/gdb/bin/msp430-elf-gdb cross-gcc494/exec/msp430-elf.x
+(gdb) set debug remote 1
+(gdb) target remote localhost:10000
+→ 接続に時間がかかるので待つ
+(gdb) info registers
+→ レジスタ値が取得できればＯＫ
+(gdb) stepi
+(gdb) break main
+(gdb) continue
+
+→ Mコマンドを有効にしてあるので，ブレークポイントを張って実行再開することが
+   できない
+
+■ 回答例を実行
+
+(キーワードの読み出し)
+% cd ~/seccon2017/answer
+% make msp430-elf.read
+→ mコマンドの応答として，ファイル内容がダンプとして取得できる
+   以下が得られる．
+
+$534543434f4e7b534f504973537465704f7269656e74656450726f677d0a0000#c9
+
+■ サーバの停止方法
+
+% killall simple-inetd sleep msp430-elf-gdb
+
+■■■■■■■■■■■■■■■■
+■ 競技用サーバ環境の構築
+
+■ サーバの準備
+
+build-1st.sh でビルドしておく
+
+chrootして動作するためのルートディレクトリの準備をする
+
+% cd ~/seccon2017/server/files
+% ./build-3rd.sh
+
+このスクリプトは以下を行う．
+
+・サーバプログラムがchrootして動作するので，chroot用のディレクトリを作成
+
+・chrootして動作するために必要な共有ライブラリをコピー
+  以下のコマンドで表示されるライブラリが必要
+  % ldd msp430-elf-gdb /bin/sh /bin/sleep
+
+  gdbはビルド時に以下のようにして環境変数LDFLAGSに-staticを指定すれば，
+  共有ライブラリを使わないで静的リンクでビルドすることもできる．
+  しかし静的リンクにするとなぜかアボートで落ちるので，共有ライブラリ利用とする
+
+  cd cross-gdb/build ; LDFLAGS=-static ./build-install-all.sh
+
+  コピー先は /lib にまとめてしまって構わない(/usr/local/libや/usr/libにある
+  ライブラリも，/libにコピーして構わない)
+  (注意： /usr/local/lib のライブラリは，~/seccon2017/root/usr/local/lib に
+   コピーしてもうまく認識されない．
+   ~/seccon2017/root/lib や ~/seccon2017/root/usr/lib だと認識される．
+   ライブラリパスのせい？)
+
+・必要ファイルのコピー(gdbや各種スクリプトなど)
+
+■ rootでのサーバ起動テスト
+
+※ anyからの接続受け付けを行うので，pfなどでフィルタをかけた状態でテストする．
+   インターネット上にあるサーバなどでテストする際には注意すること．
+
+IPフィルタの設定で，ポート10000を閉じる．
+サーバ起動用のスクリプトが添付してあるので，スーパーユーザで起動する．
+
+% cd ~/seccon2017/server/files
+
+rootになるので，HOMEが/rootになってしまうことの対処．$HOMEを直接指定する
+
+% env | grep HOME > home.sh
+
+起動用スクリプトを実行．
+
+% su
+# ./runroot.sh
+
+うまく起動できない場合は，chrootした先で共有ライブラリが不足している可能性が
+ある．必要な共有ライブラリを探してコピーしておく．
+(gdbだけでなく /bin/sh などが必要とする共有ライブラリもコピーする必要がある)
+
+接続時のエラーログは以下に出力されるので，うまく接続できない場合は以下を確認
+する(共有ライブラリが不足している場合など)
+
+seccon2017/root/tmp/gdb-*.log
+
+python系のエラーが出ている場合には，以下のようにしてpython無しでgdbを再ビルド
+(cross-gdb をそのように修正しているので不要なはず)
+
+% cd ~/seccon2017/cross-gdb/build/gdb/msp430-elf
+% cat config.log | grep TOPLEVEL_CONFIGURE_ARGUMENTS
+→ configureのオプションを確認
+% ../../../toolchain/gdb-7.12.1/configure ... --with-python=no
+→ 既存オプションに新たに --with-python=no を付加して再ビルド
+% gmake ; gmake install
+% cd ~/seccon2017
+% cp tools/gdb/bin/* root/bin
+
+以下を確認しておく．
+
+・一定時間で自動切断されること
+  % telnet localhost 10000
+  → しばらく待つと自動切断される．
+
+・回答してワードが取得できること
+  % cd ~/seccon2017/answer
+  % make msp430-elf.read
+  →word.txtの内容が取得できていることを確認
+
+  $534543434f4e7b534f504973537465704f7269656e74656450726f677d0a0000#c9
+
+■ ファイルの削除・変更の防止
+
+ファイルの削除などの防止のために，chflagsでschgフラグを立てておく．
+
+(FreeBSDの場合)
+% cd
+% su
+# cd seccon2017
+# chflags -R schg root/bin root/lib root/libexec
+# chflags schg root/word.txt root
+→ root以下でファイル変更などできないことを確認する
+   (とくに，word.txt が削除／ファイル名変更／追記できないことを確認する)
+
+■ 競技の開始
+
+IPフィルタの設定で，ポート10000を開ける．
+
+外部からうまく接続できない場合は，まずIPフィルタの設定が残っていないかを
+調べること．
+
+回答してワードが取得できることを最終確認
+
+% cd ~/seccon2017/answer
+% make msp430-elf.read
+→word.txtの内容が取得できていることを確認
+
+$534543434f4e7b534f504973537465704f7269656e74656450726f677d0a0000#c9
+
+インターネット経由で接続できることを確認
+
+■ サーバの停止
+
+# killall simple-inetd timer-exec sleep msp430-elf-gdb
+
+■ おしまい

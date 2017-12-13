@@ -1,0 +1,7 @@
+Online candy store
+I have opened an online candy store.
+
+Host : lazenca0x0.pwn.seccon.jp
+Port : 9999
+Lazenca.0x0-9374845c01384f5fc9efdce81437697499640db78523509906f315a1bed5cb3d.zip (pass:seccon2017)
+

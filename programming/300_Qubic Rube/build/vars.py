@@ -1,0 +1,10 @@
+HOSTNAME = 'qubicrube.pwn.seccon.jp'
+PORT = 33654    # 3x3x6=54
+NUM = 50
+
+FIRST_PATH = '01000000000000000000'
+PATH_LENGTH = len(FIRST_PATH)
+PATH_FILENAME = 'pathes.txt'
+
+URL_FORMAT = 'http://%s:%s/%%s' % (HOSTNAME, PORT)
+URL_LENGTH = len(URL_FORMAT % FIRST_PATH)

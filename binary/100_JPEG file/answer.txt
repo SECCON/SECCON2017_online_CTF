@@ -1,0 +1,34 @@
+Overview:
+It is a challenge to understand structure of JPEG file format.since the first 1 byte (0x26F byte) of data is 0xFF, if you change to 0xFF, the flag will be visible.
+Since JPEG is a compressed structure, the structure at the head of the data affects other data.
+Therefore, if the leading byte becomes incorrect, the image may collapse greatly.
+By the way, the correct value is 0xFD, but for other bytes 0x00 ~ 0xFE flags will be visible.
+
+
+Steps:
+1 Grasp the structure of JPEG.
+	Marker (2 bytes) + size (2 bytes) + data
+	The size includes not only data but also 2 bytes of size date.
+2 Find scan header "FF DA"  at 0x261 byte.
+3 Check 2 bytes size data "00 0C" after "FF DA"
+4 After "FF DA" + 0C byte date "FF FC A 2 8 A · ·" is confirmed as data
+5 First byte of data changes "FF" to other value
+6 flag is displayed
+
+
+
+●概要
+　JPEGの構造を理解する問題で、データの先頭１バイト（0x26Fバイト目）を0xFFになっているので、0xFF以外に変更するとフラグが見えます。
+　JPEGは圧縮構造であるため、データの先頭であるほど、他のデータに影響を与える構造となっています。
+　そのため、先頭の１バイトがおかしくなってしまった場合、画像が大きく崩れることがあります。
+　ちなみに、正しい値は0xFDですが、他のバイト0x00〜0xFEであればフラグが見えると思います。
+
+●内容
+　１　JPEGの構造を把握する。
+　　　マーカ（２バイト）＋サイズ（２バイト）＋データ
+　　　サイズは、データだけでなく、サイズの２バイトも含みます。
+　２　スキャンヘッダ「FF DA」を検索すると、0x261バイト目がヒットする。
+　３　「FF DA」の後のサイズである２バイト「00 0C」を確認
+　４　「FF DA」+ 0Cバイト後の値「FF FC A2 8A・・・」をデータとして確認
+　５　データの先頭バイトが「FF」を他の値に変更
+　６　フラグが表示される

@@ -1,0 +1,11 @@
+version: '2'
+services:
+  python:
+    build: ./python
+    ports:
+      - 8000:8000
+    #volumes:
+    #  - ./python/app/:/usr/src/app/
+    command: bash /usr/src/app/run.sh
+    environment:
+      - "flag=${flag}"

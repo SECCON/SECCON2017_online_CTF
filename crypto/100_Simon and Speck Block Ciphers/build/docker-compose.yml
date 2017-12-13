@@ -1,0 +1,10 @@
+version: '2'
+services:
+  simon:
+    build: ./simon
+    volumes:
+      - ./data/:/usr/src/app/data
+    command: bash /usr/src/app/run.sh
+    #command: tail -f /dev/null
+    environment:
+      - flag=${flag}

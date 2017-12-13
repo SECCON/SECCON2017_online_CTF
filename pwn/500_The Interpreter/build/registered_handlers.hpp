@@ -1,0 +1,16 @@
+H(0, MOV);
+H(1, ADD);
+H(2, SUB);
+H(3, PUSH);
+H(4, POP);
+H(5, JMP);
+H(6, CALL);
+H(7, RET);
+H(8, JNZ);
+H(9, LOADIMM);
+H(10, LOADSTR);
+H(11, LOADARG);
+H(12, PRINT);
+H(13, MUL);
+H(14, EXIT);
+H(15, JZ);

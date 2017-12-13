@@ -1,0 +1,7 @@
+hash_burger
+"Hash burger" for burger shop management!
+Flag is in /home/hash_burger/flag.
+
+Host : hash_burger.pwn.seccon.jp
+Port : 9999
+hash_burger-af75f859c355b45b0deee710ad4ce0dc6a2db9d7128431e1d380f34defdaad21.zip (pass:seccon2017)

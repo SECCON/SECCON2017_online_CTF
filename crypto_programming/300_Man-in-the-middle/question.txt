@@ -1,0 +1,7 @@
+Man-in-the-middle on SECP384R1
+Steal the conversation between dev0 and dev1.
+Host : mitm.pwn.seccon.jp
+Port : 8000
+
+sample code for MITM is below.
+exploit-5b67f6c7a3a7b84c8e36252773a69e9ce9818f599c63583bde50cce2301f7286.py 

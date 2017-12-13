@@ -1,0 +1,19 @@
+version: '2'
+services:
+  flask:
+    build: ./flask
+    #ports:
+    #  - 8000:8000
+    command: gunicorn app:app -b :8000 --name app
+    environment:
+      - flag=${flag}
+
+  nginx:
+    image: nginx
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+    ports:
+      - 80:80
+    links:
+      - flask:flask
+

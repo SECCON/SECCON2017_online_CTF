@@ -1,0 +1,20 @@
+$ cat<<'EOF'>a.c
+main(t,i,j){unsigned char p[]="###<f_YM\204g_YM\204g_Y_H #<f_YM\204g_YM\204g_Y_H #+-?[WKAMYJ/7 #+-?[WKgH #+-?[WKAMYJ/7hk\206\203tk\\YJAfkkk";for(i=0;t=1;i=(i+1)%(sizeof(p)-1)){double x=pow(1.05946309435931,p[i]/6+13);for(j=1+p[i]%6;t++%(8192/j);)putchar(t>>5|(int)(t*x));}}
+EOF
+$ gcc a.c && ./a.out > /dev/dsp
+  or 
+$ gcc a.c && ./a.out > /dev/audio
+
+Please listen this file as 8 bit 8.192KHz mono WAV.
+
+This melody is the Star Wars main theme.
+Answer is SECCON{STAR_WARS}.
+
+References:
+
+SECCON WARS 2014
+https://www.youtube.com/watch?v=1pC56S17-_A
+
+SECCON WARS 2015
+https://www.youtube.com/watch?v=8SFsln4VyEk
+

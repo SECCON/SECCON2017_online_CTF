@@ -1,0 +1,4 @@
+JPEG file
+Read this JPEG is broken.
+It will be fixed if you change somewhere by 1 bit.
+tktk-892009a0993d079214efa167cda2e7afc85e6b9cb38588cba9dab23eb6eb3d46

@@ -1,0 +1,10 @@
+SHA-1 is dead
+http://sha1.pwn.seccon.jp/
+Upload two files satisfy following conditions:
+	
+1. file1 != file2
+2. SHA1(file1) == SHA1(file2)
+3. SHA256(file1) <> SHA256(file2)
+4. 2017KiB < sizeof(file1) < 2018KiB
+5. 2017KiB < sizeof(file2) < 2018KiB
+* 1KiB = 1024 bytes

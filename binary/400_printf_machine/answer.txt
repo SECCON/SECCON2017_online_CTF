@@ -1,0 +1,39 @@
+files / fsmachine is a virtual machine using printf.
+This virtual machine has a 32-byte memory area (unsigned char m [32]),
+Accepts the format string (the second argument of fprintf) as a program,
+The memory area is changed while reading, writing and computing the memory.
+
+In this problem, 16-byte character strings are received from standard input and stored in m [16] to m [31]
+Check the character string entered in default.fs (format string program)
+If it is a correct character string, m [15] ends with 0.
+The input character string at that time is a flag (part of).
+
+The processing contents of default.fs are as follows.
+* Let the input character string be a 1 × 16 vector X.
+* Check whether M * X = B using the matrix M of 16 × 16 and the vector B of 1 × 16.
+* M and B are as build / eq.json. (I just made it with a random number)
+If M * X = B, then m [15] becomes 0. Otherwise, m [15] becomes non-0.
+
+The player analyzes default.fs, identifies the matrix M and the vector B, solves the simultaneous equations, calculates the correct character string of length 16, and obtains the flag.
+Solve build / solve.py. z3 is necessary.
+
+
+
+files/fsmachineがprintfを使った仮想マシンになっている。
+この仮想マシンは32バイトのメモリ領域(unsigned char m[32])を持っていて、
+フォーマット文字列（fprintfの2番目の引数）をプログラムとして受け付けて、
+メモリを読み書き、演算しつつメモリ領域を変化させていく。
+
+この問題では標準入力から16バイト分の文字列を受取りm[16]〜m[31]に格納、
+default.fs（フォーマット文字列なプログラム）で入力された文字列をチェックし、
+正しい文字列ならm[15]は0な状態で終わる。
+そのときの入力文字列がフラグ（の一部）になっている。
+
+default.fsの処理内容は次の通り。
+* 入力された文字列を1x16なベクトルXとする。
+* 16x16の行列Mと1x16なベクトルBを使って、M * X = Bとなるかをチェックする。
+* MとBはbuild/eq.jsonのとおり。（乱数で作っただけ）
+* M * X = Bならm[15]は0になる。それ以外ならm[15]は非0になる。
+
+プレーヤーは、default.fsを解析して行列MとベクトルBを特定、連立方程式を解いて長さ16の正しい文字列を算出することで、フラグを求める。
+build/solve.pyが解法。z3が必要。

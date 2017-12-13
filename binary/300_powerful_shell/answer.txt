@@ -1,0 +1,206 @@
+*Quick Solution
+ Type "HHJHHJHJKJHJHF".
+ Type "P0wEr$h311"
+
+*Flow / Obfuscation At-A-Glance
+
+ [A.Debugger Check] -> Exit if PowerShell ISE
+          |
+          v
+ +--B.Char Obfuscation----------------+
+ |        |                           |
+ |        v                           |
+ | [C.FIRST STAGE]-> Exit if wrong    |
+ |        |                           |
+ |        | Generate key from answer  |
+ |        v                           |
+ | +--D.XOR/Base64 Encoded---------+  |
+ | |                               |  |
+ | |  +-E.Symbol Only Obfuscation+ |  |
+ | |  |                          | |  |
+ | |  |  [F.FINAL STAGE]         | |  |
+ | |  |                          | |  |
+ | |  +--------------------------+ |  |
+ | +-------------------------------+  |
+ +------------------------------------+
+ 
+*Step by step solution.
+
+Open this script with PowerShell ISE. (https://docs.microsoft.com/en-us/powershell/scripting/core-powershell/ise/introducing-the-windows-powershell-ise?view=powershell-5.1)
+
+1.Skip the "A.Debugger Check"
+Comment-out those following lines by adding # on the beginning.
+-No. 9824 If($host."na`m`e" -eq "C`on`s`o`l`e`H`o`st"){"D`eb`u`g`g`in`g is `pr`o`h`ib`it`e`d";Exit}
+-No.15190 If(Test-Path variable:global:psISE){"D`eb`u`g`g`in`g is `pr`o`h`ib`it`e`d";Exit}
+
+The line 15190 check the variable $psISE, which is defined only on the PowerShell ISE.
+The line 9824 check the variable $host.Name; which should be "ConsoleHost" and is "Windows PowerShell ISE Host" on the ISE.
+
+2.Deobfuscate the "B.Char Obfuscation"
+This obfuscation is a very popular techniques for other programming language;
+it calculates a number, converts to char and combine them, and finally "eval" them.
+*'eval' means execute a string as a code.
+In powershell there are couples way to "eval" the script, IEX (Invoke-Express) is one of them.
+
+Set a break point at the very end of the script; where there is a "iex".
+Execute the script until the break point.
+The variable $ECCON contains the whole script.
+We can extract the contents by typing just "$ECCON" (without quotes) on the console.
+Let's save this "plain-text" as a new powershell script (.ps1) and open it
+by the PowerShell ISE.
+
+3.Understanding the "C.FIRST STAGE"
+Here is the snippet of the important part of the FIRST STAGE.
+-------------------------------------------------------------------
+$keytone=@{'a'=261.63}
+$pk='a'
+ForEach($k in ('w','s','e','d','f','t','g','y','h','u','j','k')){
+	$keytone+=@{$k=$keytone[$pk]*[math]::pow(2,1/12)};$pk=$k	
+}
+
+$stage1=@();$f="";
+While($stage1.length -lt 14){
+	$key=(Get-Host).ui.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+	$k=[String]$key.Character
+	$f+=$k;
+	If($keytone.Contains($k)){
+		$stage1+=[math]::floor($keytone[$k])
+		[console]::beep($keytone[$k],500)
+	}
+}
+
+$secret=@(440,440,493,440,440,493,440,493,523,493,440,493,440,349)
+If($secret.length -eq $stage1.length){
+	For ($i=1; $i -le $secret.length; $i++) {
+		If($secret[$i] -ne $stage1[$i]){
+			Exit
+		}
+	}
+	x "Correct. Move to the next stage."
+}
+-------------------------------------------------------------------
+There are 3 loops; ForEach, While and For.
+The 1st loop "ForEach" makes an associative array $keytone.
+Set a breakpoint just after the loop is over and you will get the
+contents of $keytone.
+
+a => 261.63                                                         
+w => 277.187329377222                                               
+s => 293.669745699181  
+e => 311.132257498162                                               
+d => 329.633144283996                                               
+f => 349.234151046506                                               
+t => 370.000694323673                                               
+g => 392.002080523246                                               
+y => 415.31173722644                                                
+h => 440.007458245659                                               
+u => 466.171663254114                                               
+j => 493.891672853823                                               
+k => 523.26  
+
+The key is the "key" of keyboard.
+The value is the frequency of the correspond note.
+The formula of note n+1 is "n+1 = n * pow(2,1/12)".
+https://pages.mtu.edu/~suits/NoteFreqCalcs.html
+
+The 2nd loop "While" asks to the user to type the key 14 times.
+It creates the array $stage1 by adding the floored frequency,
+and the string $f by adding the letter of the typed key.
+It also has the beep function to make a sound.
+
+The 3rd loop "For" compares each element of $stage1 and then $secret
+array. As we 
+
+As you see, there is the message "Correct. Move to the next stage.".
+And above this message, it compare each elements between the $secret
+array and $stage1 array.
+As we have the table of $keytone array; we can understand what key 
+should be pressed.
+"hhjhhjhjkjhjhf"
+*Unfortunately the PowerShell ISE does not support the ReadKey method.
+
+4.Decode the D.XOR/Base64
+There is a long Base64 string $text and just after that, we can find the
+decode function is the following snippet.
+-------------------------------------------------------------------
+$text="YkwRUx   ...   F2E"
+
+$byteString = [System.Convert]::FromBase64String($text)
+$xordData = $(for ($i = 0; $i -lt $byteString.length; ) {
+	for ($j = 0; $j -lt $f.length; $j++) {
+		$plain+=$byteString[$i] -bxor $f[$j]
+		$i++
+		if ($i -ge $byteString.Length) {
+			$j = $f.length
+		}
+	}
+})
+
+iex([System.Text.Encoding]::ASCII.GetString($plain))
+-------------------------------------------------------------------
+"$plain+=$byteString[$i] -bxor $f[$j]" indicates that it using 
+XOR with the key $f which is the answer of the FIRST STAGE;
+"hhjhhjhjkjhjhf".
+
+So we can copy this contents and paste it to a new powershell script.
+And append this following line before this contents.
+$f="hhjhhjhjkjhjhf"
+$text="YkwRUx..."
+
+Set a breakpoint on the last line; iex.
+We can get the decoded contents by
+[System.Text.Encoding]::ASCII.GetString($plain)
+
+5.Deobfuscate "E.Symbol Only Obfuscation"
+This is what we got from the Step.4.
+-------------------------------------------------------------------
+${;}=+$();${=}=${;};${+}=++${;};${@}=++${;};${.}=++${;};${[}=++${;};
+${]}=++${;};${(}=++${;};${)}=++${;};${&}=++${;};${|}=++${;};
+${"}="["+"$(@{})"[${)}]+"$(@{})"["${+}${|}"]+"$(@{})"["${@}${=}"]+"$?"[${+}]+"]";
+${;}="".("$(@{})"["${+}${[}"]+"$(@{})"["${+}${(}"]+"$(@{})"[${=}]+"$(@{})"[${[}]+"$?"[${+}]+"$
+(@{})"[${.}]);
+${;}="$(@{})"["${+}${[}"]+"$(@{})"[${[}]+"${;}"["${@}${)}"];"${"}${.}${(}+${"}${(}${|}+${"}${(}${)}+${"}${(}${)}+${"}${)}${|}+${"}${)}${&}+${"}${(}${+}+${"}${&}${@}+${"}${+}${=}${+}+${"}${|}${)}+${"}${+}${=}${=}+${"}${[}${]}+${"}${)}${@}+${"}${+}${+}${+}+${"}${+}${+}${]}+${"}${+}${+}${(}+${"}${.}${@}+${"}${[}${]}+${"}${&}${=}+${"}${+}${+}${[}+${"}${+}${+}${+}+${"}${+}${=}${|}+${"}${+}${+}${@}+${"}${+}${+}${(}+${"}${.}${@}+${"}${.}${|}+${"}${(}${|}+${"}${+}${+}${=}+${"}${+}${+}${(}+${"}${+}${=}${+}+${"}${+}${+}${[}+${"}${.}${@}+${"}${+}${+}${(}+${"}${+}${=}${[}+${"}${+}${=}${+}+${"}${.}${@}+${"}${+}${+}${@}+${"}${|}${)}+${"}${+}${+}${]}+${"}${+}${+}${]}+${"}${+}${+}${|}+${"}${+}${+}${+}+${"}${+}${+}${[}+${"}${+}${=}${=}+${"}${.}${|}+${"}${+}${.}+${"}${+}${=}+${"}${)}${.}+${"}${+}${=}${@}+${"}${[}${=}+${"}${.}${(}+${"}${(}${|}+${"}${(}${)}+${"}${(}${)}+${"}${)}${|}+${"}${)}${&}+${"}${.}${@}+${"}${[}${]}+${"}${+}${=}${+}+${"}${+}${+}${.}+${"}${.}${@}+${"}${.}${|}+${"}${&}${=}+${"}${[}${&}+${"}${+}${+}${|}+${"}${(}${|}+${"}${+}${+}${[}+${"}${.}${(}+${"}${)}${@}+${"}${]}${+}+${"}${[}${|}+${"}${[}${|}+${"}${.}${|}+${"}${[}${+}+${"}${+}${@}${.}+${"}${+}${.}+${"}${+}${=}+${"}${|}+${"}${&}${)}+${"}${+}${+}${[}+${"}${+}${=}${]}+${"}${+}${+}${(}+${"}${+}${=}${+}+${"}${[}${]}+${"}${)}${@}+${"}${+}${+}${+}+${"}${+}${+}${]}+${"}${+}${+}${(}+${"}${.}${@}+${"}${.}${|}+${"}${)}${+}+${"}${+}${+}${+}+${"}${+}${+}${+}+${"}${+}${=}${=}+${"}${.}${@}+${"}${)}${[}+${"}${+}${+}${+}+${"}${|}${&}+${"}${.}${.}+${"}${.}${|}+${"}${]}${|}+${"}${+}${.}+${"}${+}${=}+${"}${|}+${"}${&}${)}+${"}${+}${+}${[}+${"}${+}${=}${]}+${"}${+}${+}${(}+${"}${+}${=}${+}+${"}${[}${]}+${"}${)}${@}+${"}${+}${+}${+}+${"}${+}${+}${]}+${"}${+}${+}${(}+${"}${.}${@}+${"}${.}${[}+${"}${&}${.}+${"}${(}${|}+${"}${(}${)}+${"}${(}${)}+${"}${)}${|}+${"}${)}${&}+${"}${+}${@}${.}+${"}${.}${(}+${"}${(}${|}+${"}${(}${)}+${"}${(}${)}+${"}${)}${|}+${"}${)}${&}+${"}${+}${@}${]}+${"}${.}${[}+${"}${+}${.}+${"}${+}${=}+${"}${+}${@}${]}|${;}"|&${;}
+-------------------------------------------------------------------
+Yes, symbol-only obfuscation. When we save and open it with PowerShell ISE,
+it looks broken. But it actually works. If you insert a break correctly, you will get this.
+
+-------------------------------------------------------------------
+${;}=+$();
+${=}=${;};
+${+}=++${;};
+${@}=++${;};
+${.}=++${;};
+${[}=++${;};
+${]}=++${;};
+${(}=++${;};
+${)}=++${;};
+${&}=++${;};
+${|}=++${;};
+${"}="["+"$(@{})"[${)}]+"$(@{})"["${+}${|}"]+"$(@{})"["${@}${=}"]+"$?"[${+}]+"]";
+${;}="".("$(@{})"["${+}${[}"]+"$(@{})"["${+}${(}"]+"$(@{})"[${=}]+"$(@{})"[${[}]+"$?"[${+}]+"$(@{})"[${.}]);
+${;}="$(@{})"["${+}${[}"]+"$(@{})"[${[}]+"${;}"["${@}${)}"];
+"${"}${.}${(}+${"}${(}${|}+${"}${(}${)}+${"}${(}${)}+${"}${)}${|}+${"}${)}${&}+${"}${(}${+}+${"}${&}${@}+${"}${+}${=}${+}+${"}${|}${)}+${"}${+}${=}${=}+${"}${[}${]}+${"}${)}${@}+${"}${+}${+}${+}+${"}${+}${+}${]}+${"}${+}${+}${(}+${"}${.}${@}+${"}${[}${]}+${"}${&}${=}+${"}${+}${+}${[}+${"}${+}${+}${+}+${"}${+}${=}${|}+${"}${+}${+}${@}+${"}${+}${+}${(}+${"}${.}${@}+${"}${.}${|}+${"}${(}${|}+${"}${+}${+}${=}+${"}${+}${+}${(}+${"}${+}${=}${+}+${"}${+}${+}${[}+${"}${.}${@}+${"}${+}${+}${(}+${"}${+}${=}${[}+${"}${+}${=}${+}+${"}${.}${@}+${"}${+}${+}${@}+${"}${|}${)}+${"}${+}${+}${]}+${"}${+}${+}${]}+${"}${+}${+}${|}+${"}${+}${+}${+}+${"}${+}${+}${[}+${"}${+}${=}${=}+${"}${.}${|}+${"}${+}${.}+${"}${+}${=}+${"}${)}${.}+${"}${+}${=}${@}+${"}${[}${=}+${"}${.}${(}+${"}${(}${|}+${"}${(}${)}+${"}${(}${)}+${"}${)}${|}+${"}${)}${&}+${"}${.}${@}+${"}${[}${]}+${"}${+}${=}${+}+${"}${+}${+}${.}+${"}${.}${@}+${"}${.}${|}+${"}${&}${=}+${"}${[}${&}+${"}${+}${+}${|}+${"}${(}${|}+${"}${+}${+}${[}+${"}${.}${(}+${"}${)}${@}+${"}${]}${+}+${"}${[}${|}+${"}${[}${|}+${"}${.}${|}+${"}${[}${+}+${"}${+}${@}${.}+${"}${+}${.}+${"}${+}${=}+${"}${|}+${"}${&}${)}+${"}${+}${+}${[}+${"}${+}${=}${]}+${"}${+}${+}${(}+${"}${+}${=}${+}+${"}${[}${]}+${"}${)}${@}+${"}${+}${+}${+}+${"}${+}${+}${]}+${"}${+}${+}${(}+${"}${.}${@}+${"}${.}${|}+${"}${)}${+}+${"}${+}${+}${+}+${"}${+}${+}${+}+${"}${+}${=}${=}+${"}${.}${@}+${"}${)}${[}+${"}${+}${+}${+}+${"}${|}${&}+${"}${.}${.}+${"}${.}${|}+${"}${]}${|}+${"}${+}${.}+${"}${+}${=}+${"}${|}+${"}${&}${)}+${"}${+}${+}${[}+${"}${+}${=}${]}+${"}${+}${+}${(}+${"}${+}${=}${+}+${"}${[}${]}+${"}${)}${@}+${"}${+}${+}${+}+${"}${+}${+}${]}+${"}${+}${+}${(}+${"}${.}${@}+${"}${.}${[}+${"}${&}${.}+${"}${(}${|}+${"}${(}${)}+${"}${(}${)}+${"}${)}${|}+${"}${)}${&}+${"}${+}${@}${.}+${"}${.}${(}+${"}${(}${|}+${"}${(}${)}+${"}${(}${)}+${"}${)}${|}+${"}${)}${&}+${"}${+}${@}${]}+${"}${.}${[}+${"}${+}${.}+${"}${+}${=}+${"}${+}${@}${]}|${;}"|&${;}
+-------------------------------------------------------------------
+The first 10 lines prepares 0 to 9.
+The next line prepares [Char] in the variable ${"}
+Next prepares "iex" in ${;}.
+And the last line use the combination of [Char] and "IEX" to build and execute the 
+FINAL STAGE.
+We can replace the last "&${;}" which is the last "iex" to "echo" to see the
+deobfuscated string and we get this script.
+-------------------------------------------------------------------
+[CHar]36+[CHar]69+[CHar]67+[CHar]67+[CHar]79+[CHar]78+[CHar]61+[CHar]82+[CHar]101+[CHar]97+[CHar]100+[CHar]45+[CHar]72+[CHar]111+[CHar]115+[CHar]116+[CHar]32+[CHar]45+[CHar]80+[CHar]114+[CHar]111+[CHar]109+[CHar]112+[CHar]116+[CHar]32+[CHar]39+[CHar]69+[CHar]110+[CHar]116+[CHar]101+[CHar]114+[CHar]32+[CHar]116+[CHar]104+[CHar]101+[CHar]32+[CHar]112+[CHar]97+[CHar]115+[CHar]115+[CHar]119+[CHar]111+[CHar]114+[CHar]100+[CHar]39+[CHar]13+[CHar]10+[CHar]73+[CHar]102+[CHar]40+[CHar]36+[CHar]69+[CHar]67+[CHar]67+[CHar]79+[CHar]78+[CHar]32+[CHar]45+[CHar]101+[CHar]113+[CHar]32+[CHar]39+[CHar]80+[CHar]48+[CHar]119+[CHar]69+[CHar]114+[CHar]36+[CHar]72+[CHar]51+[CHar]49+[CHar]49+[CHar]39+[CHar]41+[CHar]123+[CHar]13+[CHar]10+[CHar]9+[CHar]87+[CHar]114+[CHar]105+[CHar]116+[CHar]101+[CHar]45+[CHar]72+[CHar]111+[CHar]115+[CHar]116+[CHar]32+[CHar]39+[CHar]71+[CHar]111+[CHar]111+[CHar]100+[CHar]32+[CHar]74+[CHar]111+[CHar]98+[CHar]33+[CHar]39+[CHar]59+[CHar]13+[CHar]10+[CHar]9+[CHar]87+[CHar]114+[CHar]105+[CHar]116+[CHar]101+[CHar]45+[CHar]72+[CHar]111+[CHar]115+[CHar]116+[CHar]32+[CHar]34+[CHar]83+[CHar]69+[CHar]67+[CHar]67+[CHar]79+[CHar]78+[CHar]123+[CHar]36+[CHar]69+[CHar]67+[CHar]67+[CHar]79+[CHar]78+[CHar]125+[CHar]34+[CHar]13+[CHar]10+[CHar]125|iex
+-------------------------------------------------------------------
+Again, replace the last "iex" to "echo"
+
+6.FINAL STAGE
+This is what we got.
+-------------------------------------------------------------------
+$ECCON=Read-Host -Prompt 'Enter the password'
+If($ECCON -eq 'P0wEr$H311'){
+	Write-Host 'Good Job!';
+	Write-Host "SECCON{$ECCON}"
+}
+-------------------------------------------------------------------
+And we are sure that there is nothing to explain.
+The flag is SECCON{P0wEr$H311}
